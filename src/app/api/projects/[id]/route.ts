@@ -29,9 +29,14 @@ export async function GET(
     if (Number.isNaN(projectId)) return NextResponse.json({ error: 'Invalid project ID' }, { status: 400 })
 
     const project = db.prepare(`
-      SELECT id, workspace_id, name, slug, description, ticket_prefix, ticket_counter, status, created_at, updated_at
-      FROM projects
-      WHERE id = ? AND workspace_id = ?
+      SELECT p.id, p.workspace_id, p.name, p.slug, p.description, p.ticket_prefix,
+             p.ticket_counter, p.status, p.path, p.created_at, p.updated_at,
+             (SELECT COUNT(*) FROM tasks WHERE project_id = p.id) AS task_count,
+             (SELECT COUNT(*) FROM claude_sessions WHERE project_path = p.path AND p.path IS NOT NULL) AS session_count,
+             (SELECT COUNT(*) FROM claude_sessions WHERE project_path = p.path AND p.path IS NOT NULL AND is_active = 1) AS active_session_count,
+             (SELECT MAX(last_message_at) FROM claude_sessions WHERE project_path = p.path AND p.path IS NOT NULL) AS last_session_at
+      FROM projects p
+      WHERE p.id = ? AND p.workspace_id = ?
     `).get(projectId, workspaceId)
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
@@ -99,6 +104,10 @@ export async function PATCH(
       updates.push('status = ?')
       paramsList.push(status)
     }
+    if (typeof body?.path === 'string') {
+      updates.push('path = ?')
+      paramsList.push(body.path.trim() || null)
+    }
 
     if (updates.length === 0) return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
 
@@ -110,7 +119,7 @@ export async function PATCH(
     `).run(...paramsList, projectId, workspaceId)
 
     const project = db.prepare(`
-      SELECT id, workspace_id, name, slug, description, ticket_prefix, ticket_counter, status, created_at, updated_at
+      SELECT id, workspace_id, name, slug, description, ticket_prefix, ticket_counter, status, path, created_at, updated_at
       FROM projects
       WHERE id = ? AND workspace_id = ?
     `).get(projectId, workspaceId)

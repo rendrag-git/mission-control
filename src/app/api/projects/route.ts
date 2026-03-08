@@ -28,11 +28,16 @@ export async function GET(request: NextRequest) {
     const includeArchived = new URL(request.url).searchParams.get('includeArchived') === '1'
 
     const projects = db.prepare(`
-      SELECT id, workspace_id, name, slug, description, ticket_prefix, ticket_counter, status, created_at, updated_at
-      FROM projects
-      WHERE workspace_id = ?
-        ${includeArchived ? '' : "AND status = 'active'"}
-      ORDER BY name COLLATE NOCASE ASC
+      SELECT p.id, p.workspace_id, p.name, p.slug, p.description, p.ticket_prefix,
+             p.ticket_counter, p.status, p.path, p.created_at, p.updated_at,
+             (SELECT COUNT(*) FROM tasks WHERE project_id = p.id) AS task_count,
+             (SELECT COUNT(*) FROM claude_sessions WHERE project_path = p.path AND p.path IS NOT NULL) AS session_count,
+             (SELECT COUNT(*) FROM claude_sessions WHERE project_path = p.path AND p.path IS NOT NULL AND is_active = 1) AS active_session_count,
+             (SELECT MAX(last_message_at) FROM claude_sessions WHERE project_path = p.path AND p.path IS NOT NULL) AS last_session_at
+      FROM projects p
+      WHERE p.workspace_id = ?
+        ${includeArchived ? '' : "AND p.status = 'active'"}
+      ORDER BY p.name COLLATE NOCASE ASC
     `).all(workspaceId)
 
     return NextResponse.json({ projects })
@@ -58,6 +63,7 @@ export async function POST(request: NextRequest) {
     const description = typeof body?.description === 'string' ? body.description.trim() : ''
     const prefixInput = String(body?.ticket_prefix || body?.ticketPrefix || '').trim()
     const slugInput = String(body?.slug || '').trim()
+    const pathInput = typeof body?.path === 'string' ? body.path.trim() : null
 
     if (!name) return NextResponse.json({ error: 'Project name is required' }, { status: 400 })
 
@@ -76,12 +82,12 @@ export async function POST(request: NextRequest) {
     }
 
     const result = db.prepare(`
-      INSERT INTO projects (workspace_id, name, slug, description, ticket_prefix, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 'active', unixepoch(), unixepoch())
-    `).run(workspaceId, name, slug, description || null, ticketPrefix)
+      INSERT INTO projects (workspace_id, name, slug, description, ticket_prefix, path, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'active', unixepoch(), unixepoch())
+    `).run(workspaceId, name, slug, description || null, ticketPrefix, pathInput)
 
     const project = db.prepare(`
-      SELECT id, workspace_id, name, slug, description, ticket_prefix, ticket_counter, status, created_at, updated_at
+      SELECT id, workspace_id, name, slug, description, ticket_prefix, ticket_counter, status, path, created_at, updated_at
       FROM projects
       WHERE id = ?
     `).get(Number(result.lastInsertRowid))
