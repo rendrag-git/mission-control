@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
   const workspaceId = auth.user.workspace_id ?? 1
-  const actor = auth.user.name || auth.user.email || 'api'
+  const actor = auth.user.display_name || auth.user.username || 'api'
   const result = syncProjectsFromDirectory(actor, workspaceId)
 
   if (result.error) {
