@@ -1,5 +1,6 @@
 import { getDatabase, logAuditEvent } from './db'
 import { syncAgentsFromConfig } from './agent-sync'
+import { syncProjectsFromDirectory } from './project-sync'
 import { config, ensureDirExists } from './config'
 import { join, dirname } from 'path'
 import { readdirSync, statSync, unlinkSync } from 'fs'
@@ -220,6 +221,13 @@ export function initScheduler() {
   syncAgentsFromConfig('startup').catch(err => {
     logger.warn({ err }, 'Agent auto-sync failed')
   })
+
+  // Auto-discover projects from filesystem on startup
+  try {
+    syncProjectsFromDirectory('startup')
+  } catch (err) {
+    logger.warn({ err }, 'Project directory sync failed')
+  }
 
   // Register tasks
   const now = Date.now()
