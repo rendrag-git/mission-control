@@ -830,6 +830,22 @@ const migrations: Migration[] = [
       db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_api_keys_expires_at ON agent_api_keys(expires_at)`)
       db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_api_keys_revoked_at ON agent_api_keys(revoked_at)`)
     }
+  },
+  {
+    id: '028_projects_path',
+    up: (db) => {
+      const hasProjects = db
+        .prepare(`SELECT 1 as ok FROM sqlite_master WHERE type = 'table' AND name = 'projects'`)
+        .get() as { ok?: number } | undefined
+      if (!hasProjects?.ok) return
+
+      const columns = db.prepare(`PRAGMA table_info(projects)`).all() as { name: string }[]
+      const hasPath = columns.some((col) => col.name === 'path')
+      if (hasPath) return
+
+      db.exec(`ALTER TABLE projects ADD COLUMN path TEXT`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_projects_path ON projects(path)`)
+    }
   }
 ]
 

@@ -75,6 +75,8 @@ export const config = {
     process.env.OPENCLAW_SOUL_TEMPLATES_DIR ||
     (openclawStateDir ? path.join(openclawStateDir, 'templates', 'souls') : ''),
   homeDir: os.homedir(),
+  projectsDir:
+    process.env.MC_PROJECTS_DIR || path.join(os.homedir(), 'projects'),
   // Data retention (days). 0 = keep forever.
   retention: {
     activities: Number(process.env.MC_RETAIN_ACTIVITIES_DAYS || '90'),
